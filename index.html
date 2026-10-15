@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CCLM Chaos &amp; Resilience Testing — Showcase</title>
+  <link rel="stylesheet" href="css/reveal.css" />
+  <link rel="stylesheet" href="css/custom.css" />
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+
+      <section id="s-intro" data-background-color="#F1F5F9">
+        <div class="eyebrow">Chaos Engineering · CHAOS-1407</div>
+        <h1 class="title-primary">Cross-Cluster Live Migration</h1>
+        <h2 class="title-secondary">Chaos &amp; Resilience Testing</h2>
+        <p class="presenter-line">Darshan Jain</p>
+        <ol class="agenda-list" id="intro-agenda">
+          <li><span class="num">01</span> What is CCLM and how it works</li>
+          <li><span class="num">02</span> How we tested — vmshift-validator</li>
+          <li><span class="num">03</span> Spec-driven agentic runs — cclm-test</li>
+          <li><span class="num">04</span> Recommendations, bugs, next steps</li>
+        </ol>
+      </section>
+
+      <!-- Act 2 — What is CCLM -->
+      <section id="s-cclm-what" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 2 · Context</div>
+        <h2>What is CCLM?</h2>
+        <div class="context-list" id="cclm-what-list">
+          <div class="context-item" data-ci="1">
+            <div class="ci-num">1</div>
+            <div class="ci-body">
+              <div class="ci-title">OpenShift Virtualization</div>
+              <div class="ci-text">Run VMs as pods on OpenShift — upstream is <strong>KubeVirt</strong>. VMs get all the Kubernetes advantages: scheduling, autoscaling, self-healing, monitoring — one platform for VMs and containers.</div>
+            </div>
+          </div>
+          <div class="context-item" data-ci="2">
+            <div class="ci-num">2</div>
+            <div class="ci-body">
+              <div class="ci-title">CCLM — a feature of OpenShift Virtualization</div>
+              <div class="ci-text">Cross-cluster live migration moves a <strong>running</strong> VM from one OpenShift cluster to another with no workload disruption — memory copied live over cross-cluster network, guest state preserved (same PIDs, no data gap), orchestrated by MTV/Forklift.</div>
+            </div>
+          </div>
+          <div class="context-item" data-ci="3">
+            <div class="ci-num">3</div>
+            <div class="ci-body">
+              <div class="ci-title">Where it's used</div>
+              <div class="ci-text">Keeping critical VMs online through infrastructure change — Tech Preview in OpenShift Virtualization 4.20.</div>
+              <div class="ci-chips">
+                <span class="ci-chip">cluster maintenance &amp; evacuation</span>
+                <span class="ci-chip">hardware refreshes</span>
+                <span class="ci-chip">cluster consolidation</span>
+                <span class="ci-chip">regional workload mobility</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="caption-bar">
+          <p class="caption-text" id="cw-caption">Three ideas before the deep-dive: the platform, the feature, the reason it matters.</p>
+          <div id="cw-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+
+      <!-- Act 2A — simplified Plan → Migration → VMIM -->
+      <section id="s-cclm-arch" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 2 · Control plane</div>
+        <h2>How CCLM works — assembling the flow</h2>
+        <div class="stage-2col" id="arch-stage">
+          <div class="cluster blue" id="arch-blue">
+            <div class="cluster-title">Blue · Source</div>
+            <div class="infra-panel" aria-label="Blue cluster infrastructure">
+              <div class="infra-row"><span class="infra-k">Control plane</span><span class="infra-v">3 masters</span></div>
+              <div class="infra-row"><span class="infra-k">Workers</span><span class="infra-v">10 · 13 nodes total</span></div>
+              <div class="infra-row"><span class="infra-k">Per node</span><span class="infra-v">R660 · 512 GB · 110 cores · 25GbE</span></div>
+              <div class="infra-row"><span class="infra-k">Storage</span><span class="infra-v">NFS-CSI (RWX)</span></div>
+              <div class="infra-row"><span class="infra-k">OpenShift</span><span class="infra-v">4.21.18 · CNV 4.21</span></div>
+              <div class="infra-row"><span class="infra-k">Network</span><span class="infra-v">198.18.0.0/16 · baremetal-L2</span></div>
+            </div>
+            <div class="card-node" data-beat="1" id="n-virt-controller-b"><span class="node-name">virt-controller</span><span class="node-meta">KubeVirt</span></div>
+            <div class="card-node" data-beat="1" id="n-virt-api-b"><span class="node-name">virt-api</span><span class="node-meta">KubeVirt</span></div>
+            <div class="card-node" data-beat="1" id="n-virt-handler-src"><span class="node-name">virt-handler</span><span class="node-meta">proxy :9185</span></div>
+            <div class="card-node green-active" data-beat="2" id="n-vm-running"><span class="node-name">Running VM</span><span class="node-meta">guest apps · file / sqlite / http</span></div>
+            <div class="card-node" data-beat="2" id="n-launcher-src"><span class="node-name">virt-launcher · SOURCE QEMU</span><span class="node-meta">status: Running</span></div>
+          </div>
+          <div class="cluster green" id="arch-green">
+            <div class="cluster-title">Green · Target + MTV</div>
+            <div class="infra-panel" aria-label="Green cluster infrastructure">
+              <div class="infra-row"><span class="infra-k">Control plane</span><span class="infra-v">3 masters</span></div>
+              <div class="infra-row"><span class="infra-k">Workers</span><span class="infra-v">10 · 13 nodes total</span></div>
+              <div class="infra-row"><span class="infra-k">Per node</span><span class="infra-v">R660 · 512 GB · 110 cores · 25GbE</span></div>
+              <div class="infra-row"><span class="infra-k">Storage</span><span class="infra-v">NFS-CSI (RWX shared)</span></div>
+              <div class="infra-row"><span class="infra-k">OpenShift</span><span class="infra-v">4.21.18 · MTV / Forklift</span></div>
+              <div class="infra-row"><span class="infra-k">Network</span><span class="infra-v">198.19.0.0/16 · br-migration L2</span></div>
+            </div>
+            <div class="card-node" data-beat="1" id="n-virt-controller-g"><span class="node-name">virt-controller</span><span class="node-meta">KubeVirt</span></div>
+            <div class="card-node" data-beat="1" id="n-virt-api-g"><span class="node-name">virt-api</span><span class="node-meta">KubeVirt</span></div>
+            <div class="card-node" data-beat="1" id="n-virt-handler-tgt"><span class="node-name">virt-handler</span><span class="node-meta">proxy :9185</span></div>
+            <div class="card-node" data-beat="1" id="n-forklift-ctrl"><span class="node-name">forklift-controller</span><span class="node-meta">MTV orchestrator</span></div>
+            <div class="card-node" data-beat="1" id="n-forklift-api"><span class="node-name">forklift-api</span><span class="node-meta">MTV</span></div>
+            <div class="card-node accent" data-beat="3" id="n-plan"><span class="node-name">Plan</span><span class="node-meta">type: live · Ready</span></div>
+            <div class="card-node accent" data-beat="4" id="n-migration">
+              <span class="node-name">Migration CR</span>
+              <span class="node-meta">phases</span>
+              <div class="phase-strip">
+                <div class="phase-seg" id="ph-prep"></div>
+                <div class="phase-seg" id="ph-sync"></div>
+                <div class="phase-seg" id="ph-done"></div>
+              </div>
+            </div>
+            <div class="card-node" data-beat="4" id="n-launcher-tgt"><span class="node-name">Target VM skeleton</span><span class="node-meta">empty virt-launcher</span></div>
+            <div class="card-node vmim" data-beat="5" id="n-vmim"><span class="node-name">VMIM</span><span class="node-meta">KubeVirt · memory job</span></div>
+          </div>
+        </div>
+        <div class="caption-bar">
+          <p class="caption-text" id="arch-caption">Two OpenShift clusters. One VM will move live from Blue to Green.</p>
+          <div id="arch-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+
+      <!-- Act 2B Memory -->
+      <section id="s-memory" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 2 · Data plane</div>
+        <h2>Memory page transfer — Source → Target</h2>
+        <div class="breadcrumb-mini">Plan · Migration · <span class="hot">VMIM Running</span></div>
+        <div class="mem-stage" id="mem-stage">
+          <div class="launcher-box blue-side" id="mem-src">
+            <div class="lbl">BLUE · SOURCE virt-launcher</div>
+            <div class="status-badge running" id="mem-src-status">Guest Running</div>
+            <div class="ram-meter"><div class="ram-fill" id="ram-src" style="width:100%"></div></div>
+          </div>
+          <div class="phase-rail-mem" id="mem-phases">
+            <div class="phase-step" data-phase="1" id="ph-precopy">
+              <div class="ph-num">PHASE 1</div>
+              <div class="ph-title">Pre-copy</div>
+              <div class="ph-sub">bulk RAM</div>
+            </div>
+            <div class="phase-step" data-phase="2" id="ph-dirty">
+              <div class="ph-num">PHASE 2</div>
+              <div class="ph-title">Dirty pages</div>
+              <div class="ph-sub">rate → 0</div>
+            </div>
+            <div class="phase-step" data-phase="3" id="ph-cutover">
+              <div class="ph-num">PHASE 3</div>
+              <div class="ph-title">Cutover</div>
+              <div class="ph-sub">~65 ms</div>
+            </div>
+          </div>
+          <div class="launcher-box green-side" id="mem-tgt">
+            <div class="lbl">GREEN · TARGET virt-launcher</div>
+            <div class="status-badge waiting" id="mem-tgt-status">Waiting</div>
+            <div class="ram-meter"><div class="ram-fill" id="ram-tgt" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div class="metrics-row" id="mem-metrics" style="position:absolute;left:48px;bottom:120px"></div>
+        <div class="caption-bar">
+          <p class="caption-text" id="mem-caption">Disk is already shared. Only guest memory must move over br-migration.</p>
+          <div id="mem-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+
+      <!-- Act 3 Validator -->
+      <section id="s-validator" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 3 · How we tested</div>
+        <h2>vmshift-validator pipeline</h2>
+        <p style="font-size:0.55em;max-width:60ch;color:var(--color-foreground)">
+          Guest-level truth — CR Succeeded is not enough. PIDs, SQLite, logs, and domjobinfo prove live migration.
+        </p>
+        <div class="pipeline" id="val-pipeline">
+          <div class="pipe-box" data-step="1">
+            <div class="step">1/4</div>
+            <div class="title">VERIFY workloads</div>
+            <ul class="bullets">
+              <li>SSH into source VM</li>
+              <li>Confirm file-writer, SQLite, HTTP up</li>
+            </ul>
+            <div class="why">Why: baseline health before migrate</div>
+          </div>
+          <span class="pipe-chevron">→</span>
+          <div class="pipe-box" data-step="2">
+            <div class="step">2/4</div>
+            <div class="title">PRE snapshot</div>
+            <ul class="bullets">
+              <li>Line counts, PIDs</li>
+              <li>SQLite integrity, Prometheus</li>
+            </ul>
+            <div class="why">Why: compare after cutover</div>
+          </div>
+          <span class="pipe-chevron">→</span>
+          <div class="pipe-box" data-step="3">
+            <div class="step">3/4</div>
+            <div class="title">MIGRATE + WAIT</div>
+            <ul class="bullets">
+              <li>Plan Ready → Migration</li>
+              <li>Prep → Sync → Done</li>
+            </ul>
+            <div class="why">Why: wait for completion</div>
+          </div>
+          <span class="pipe-chevron">→</span>
+          <div class="pipe-box" data-step="4">
+            <div class="step">4/4</div>
+            <div class="title">POST check</div>
+            <ul class="bullets">
+              <li>SSH on Green; compare pre vs post</li>
+              <li>domjobinfo metrics</li>
+            </ul>
+            <div class="why">Why: prove live (same PIDs)</div>
+          </div>
+          <span class="pipe-chevron">→</span>
+          <div class="pipe-box" data-step="5">
+            <div class="step">OUT</div>
+            <div class="title">summary.json PASS</div>
+            <ul class="bullets">
+              <li>PIDs unchanged</li>
+              <li>Data continued, no gap</li>
+            </ul>
+            <div class="why">Verdict artifact</div>
+          </div>
+        </div>
+        <p style="font-size:0.48em;margin-top:18px;font-family:var(--font-mono);color:var(--color-muted-foreground)">
+          github.com/redhat-chaos/vmshift-validator · cloud29 · Blue→Green · OCP 4.21.18
+        </p>
+        <div class="caption-bar">
+          <p class="caption-text" id="val-caption">Independent guest validation is how we catch silent Forklift failures.</p>
+          <div id="val-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+
+      <!-- Act 4 Scenarios -->
+      <section id="s-scenarios" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 4 · Spec-driven</div>
+        <h2>Chaos scenario catalog</h2>
+        <p style="font-size:0.55em">One folder per ID · <code>scenario-spec.md</code> is the contract · optional <code>reports/</code></p>
+        <div class="scenario-grid" id="scenario-grid">
+          <div class="scenario-tile" data-family="A">
+            <div class="icon-wrap" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6M9 12h6M9 15h4"/></svg></div>
+            <div class="id">A</div>
+            <div class="desc">Pod kills — virt-launcher, handler, controller, Forklift</div>
+          </div>
+          <div class="scenario-tile" data-family="B">
+            <div class="icon-wrap" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12h4l2-6 4 12 2-6h4"/></svg></div>
+            <div class="id">B</div>
+            <div class="desc">Network — latency, loss, partition, port 9185, DNS, blackout</div>
+          </div>
+          <div class="scenario-tile" data-family="C">
+            <div class="icon-wrap" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-8M22 20V8"/></svg></div>
+            <div class="id">C</div>
+            <div class="desc">Resource stress — CPU / memory on workers &amp; control plane</div>
+          </div>
+          <div class="scenario-tile" data-family="D">
+            <div class="icon-wrap" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg></div>
+            <div class="id">D</div>
+            <div class="desc">Storage — DataVolume disruption</div>
+          </div>
+          <div class="scenario-tile" data-family="E">
+            <div class="icon-wrap" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div>
+            <div class="id">E</div>
+            <div class="desc">Control plane — API, etcd, master CPU/mem</div>
+          </div>
+          <div class="scenario-tile" data-family="F">
+            <div class="icon-wrap" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="7" cy="12" r="1.5"/><path d="M12 10h6M12 14h4"/></svg></div>
+            <div class="id">F / G</div>
+            <div class="desc">Node drain · IPMI power-off during VMIM</div>
+          </div>
+          <div class="scenario-tile" data-family="S">
+            <div class="icon-wrap" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="8" r="2"/><circle cx="12" cy="8" r="2"/><circle cx="18" cy="8" r="2"/><circle cx="6" cy="16" r="2"/><circle cx="12" cy="16" r="2"/><circle cx="18" cy="16" r="2"/></svg></div>
+            <div class="id">S</div>
+            <div class="desc">Scale — 5 / 20 / 50 VMs concurrent</div>
+          </div>
+          <div class="scenario-tile" data-family="X">
+            <div class="icon-wrap" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/><circle cx="12" cy="12" r="3"/></svg></div>
+            <div class="id">X</div>
+            <div class="desc">Compound faults — dual kills, network + pod</div>
+          </div>
+        </div>
+        <div class="caption-bar">
+          <p class="caption-text" id="scn-caption">37+ scenarios under cclm-chaos/scenarios — specs drive reproducible runs.</p>
+          <div id="scn-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+
+      <!-- Act 4 Agentic layer -->
+      <section id="s-agent-layer" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 4 · Agentic chaos</div>
+        <h2>From scripted harness to agent</h2>
+        <div class="layer-grid">
+          <div class="layer-col" id="layer-harness">
+            <div class="layer-tag">vmshift-validator · deterministic</div>
+            <div class="hstep" data-hs="1"><span class="hs-n">1</span><span>density-setup — kube-burner VM fleet</span></div>
+            <div class="hstep" data-hs="2"><span class="hs-n">2</span><span>pre-check — guest baseline snapshot</span></div>
+            <div class="hstep" data-hs="3"><span class="hs-n">3</span><span>migrate-selective — Forklift blue→green</span></div>
+            <div class="hstep" data-hs="4"><span class="hs-n">4</span><span>post-check — PIDs · SQLite · files</span></div>
+            <div class="hstep" data-hs="5"><span class="hs-n">5</span><span>report — summary.json verdict</span></div>
+          </div>
+          <div class="layer-col" id="layer-agent">
+            <div class="layer-tag layer-tag-agent">.claude/skills/cclm-test · agentic</div>
+            <div class="agent-bubble" data-ab="1"><span class="ab-who">human</span><span class="ab-txt">“kill virt-launcher during migration”</span></div>
+            <div class="agent-bubble agent-out" data-ab="2"><span class="ab-who">agent</span><span class="ab-txt">matches A1 spec → proposes test plan</span></div>
+            <div class="agent-bubble agent-out" data-ab="3"><span class="ab-who">agent</span><span class="ab-txt">runs harness · proves injection · judges PASS/FAIL vs spec</span></div>
+            <div class="layer-artifacts" data-ab="4">
+              <span class="layer-chip">14-section report</span>
+              <span class="layer-chip">bug file + tracker</span>
+              <span class="layer-chip">verdict</span>
+            </div>
+          </div>
+        </div>
+        <div class="caption-bar">
+          <p class="caption-text" id="layer-caption">The harness is deterministic. The agent around it is not — that's the point.</p>
+          <div id="layer-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+      <!-- Act 4 Agentic -->
+      <section id="s-agentic" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 4 · cclm-test skill</div>
+        <h2>Agent-driven testing workflow</h2>
+        <p style="font-size:0.5em;font-family:var(--font-mono);color:var(--color-muted-foreground)">
+          .claude/skills/cclm-test · trigger: “test A1” / “run chaos B3” / free-form fault
+        </p>
+        <div class="phase-rail" id="agent-phases">
+          <div class="phase-card" data-ph="1">
+            <div class="ph">P1</div>
+            <div class="nm">Understand spec</div>
+            <ul class="bullets">
+              <li>Read scenario-spec.md</li>
+              <li>Krkn type + trigger gate</li>
+            </ul>
+          </div>
+          <div class="phase-card" data-ph="2">
+            <div class="ph">P2</div>
+            <div class="nm">Analyze cluster</div>
+            <ul class="bullets">
+              <li>Connectivity + discover-vms</li>
+              <li>Forklift ready · krknctl</li>
+            </ul>
+          </div>
+          <div class="phase-card" data-ph="3">
+            <div class="ph">P3</div>
+            <div class="nm">Prepare</div>
+            <ul class="bullets">
+              <li>Sync bastion · resolve params</li>
+              <li>Prefer chaos-trigger.sh</li>
+            </ul>
+          </div>
+          <div class="phase-card" data-ph="4">
+            <div class="ph">P4</div>
+            <div class="nm">Confirm with user</div>
+            <ul class="bullets">
+              <li>Show test plan</li>
+              <li>Wait for human OK</li>
+            </ul>
+          </div>
+          <div class="phase-card" data-ph="5">
+            <div class="ph">P5</div>
+            <div class="nm">Execute mig + chaos</div>
+            <ul class="bullets">
+              <li>Start migration</li>
+              <li>Inject at VMIM gate</li>
+            </ul>
+          </div>
+          <div class="phase-card" data-ph="6">
+            <div class="ph">P6</div>
+            <div class="nm">Verify injection</div>
+            <ul class="bullets">
+              <li>Events / pod / tc evidence</li>
+              <li>Else: no trusted verdict</li>
+            </ul>
+          </div>
+          <div class="phase-card" data-ph="7">
+            <div class="ph">P7</div>
+            <div class="nm">Analyze results</div>
+            <ul class="bullets">
+              <li>Outcome + timing grade</li>
+              <li>Guest integrity vs spec</li>
+            </ul>
+          </div>
+          <div class="phase-card" data-ph="8">
+            <div class="ph">P8</div>
+            <div class="nm">Report + bugs</div>
+            <ul class="bullets">
+              <li>Report template</li>
+              <li>Bug file → bug-tracker</li>
+            </ul>
+          </div>
+        </div>
+        <div class="agent-term" id="agent-term">
+          <div class="at-bar"><span class="at-dot"></span><span class="at-dot"></span><span class="at-dot"></span><span class="at-title">cclm-test · bastion ssh</span></div>
+          <pre class="at-body" id="agent-term-body"></pre>
+        </div>
+        <div class="caption-bar">
+          <p class="caption-text" id="agent-caption">cclm-test: natural language → disciplined chaos run.</p>
+          <div id="agent-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+
+
+      <!-- Act 4 Gate the chaos -->
+      <section id="s-agent-gate" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 4 · Trigger gates</div>
+        <h2>Gate the chaos — fire at the exact moment</h2>
+        <p style="font-size:0.5em;color:var(--color-muted-foreground)">
+          krknctl startup (~10s) made blind kills <em>miss</em> the migration window → phase-gated triggers
+        </p>
+        <div class="gate-wrap">
+          <div class="gate-rail">
+            <div class="gate-rail-label">migration</div>
+            <div class="gate-node" data-gn="1">Plan Ready</div>
+            <div class="gate-node gate-node-gate" data-gn="2">VMIM Running</div>
+            <div class="gate-node" data-gn="3">Scheduling</div>
+            <div class="gate-node" data-gn="4">Synchronization</div>
+            <div class="gate-node" data-gn="5">Completed</div>
+            <div class="gate-bolt" id="gate-bolt">⚡</div>
+          </div>
+          <div class="gate-rail gate-rail-chaos">
+            <div class="gate-rail-label">chaos</div>
+            <div class="gate-poll" data-gp="1">poll VMIM phase</div>
+            <div class="gate-poll" data-gp="2">poll…</div>
+            <div class="gate-poll" data-gp="3">gate hit → inject</div>
+            <div class="gate-hold" data-gp="4">fault stays active across cutover</div>
+          </div>
+          <div class="gate-human">
+            <div class="gh-badge" id="gh-badge">P4 · HUMAN GATE</div>
+            <div class="gh-req">agent proposes plan</div>
+            <div class="gh-arrow" id="gh-arrow">⇢</div>
+            <div class="gh-ok" id="gh-ok">user confirms ✓</div>
+          </div>
+        </div>
+        <div class="caption-bar">
+          <p class="caption-text" id="gate-caption">Spec declares the gate: vmim-running, target-pod, plan-executing — chaos fires only then.</p>
+          <div id="gate-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+
+      <!-- Act 4 Prove injection -->
+      <section id="s-agent-inject" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 4 · Phase 6</div>
+        <h2>Prove the injection — or trust nothing</h2>
+        <div class="inject-grid">
+          <div class="inject-case">
+            <div class="ic-head">The bug we caught by checking</div>
+            <div class="ic-cmd">krkn network-chaos <span class="ic-flag">{loss: 0.10}</span></div>
+            <div class="ic-eq">→ tc netem loss <span class="ic-bad">0.1</span> — <strong>0.1%, not 10%</strong></div>
+            <div class="ic-verdict" id="ic-verdict">B2 verdict: INCONCLUSIVE — “intended chaos level achieved: FAIL”</div>
+            <p class="ic-note">Krkn docs say fraction · tc expects percent · two runs invalid, caught by Phase 6 evidence</p>
+          </div>
+          <div class="inject-evidence">
+            <div class="ie-head">Evidence, not assertion</div>
+            <div class="ie-chip" data-iev="1"><span class="ie-ic">🛰</span> krkn pod logs show fault active</div>
+            <div class="ie-chip" data-iev="2"><span class="ie-ic">🔗</span> tc qdisc visible on the wire</div>
+            <div class="ie-chip" data-iev="3"><span class="ie-ic">📉</span> pod deleted / events recorded</div>
+            <div class="ie-chip" data-iev="4"><span class="ie-ic">🕐</span> fault span covers VMIM window</div>
+            <div class="ie-rule" id="ie-rule">No verified injection → no verdict. Ever.</div>
+          </div>
+        </div>
+        <div class="caption-bar">
+          <p class="caption-text" id="inject-caption">Phase 6 exists because commands lie: prove the fault fired before reading any result.</p>
+          <div id="inject-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+
+      <!-- Act 4 Agent team -->
+      <section id="s-agent-team" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 4 · Next</div>
+        <h2>From one agent to a team</h2>
+        <ul class="team-list" id="team-list">
+          <li class="tm" data-tm="1">
+            <strong>Lead agent</strong> — one long-lived orchestrator: owns the plan and the verdict, dispatches work, patches the team
+            <ul>
+              <li>Short-lived specialist workers, one per task: issue-triage · krkn-prepare · observer · recovery · report-writer · analyst</li>
+              <li>Model per job: fast tier for polling/triage, mid tier for commands/reports, strongest for diagnosis &amp; judgment</li>
+            </ul>
+          </li>
+          <li class="tm" data-tm="2">
+            <strong>Shared state files</strong> — coordination through files on disk, not conversation
+            <ul>
+              <li><code>run-state.md</code> · <code>design.md</code> · <code>postmortems/</code> — every agent reads and writes the same state</li>
+            </ul>
+          </li>
+          <li class="tm" data-tm="3">
+            <strong>Self-improving</strong> — when a worker fails, the Lead learns from it
+            <ul>
+              <li>Failure → postmortem → Lead patches that subagent's prompt → relaunch improved worker next run</li>
+              <li>Seed already exists: the agent's 401 stale-token fix, saved to memory in the real run</li>
+            </ul>
+          </li>
+          <li class="tm" data-tm="4">
+            <strong>Loop engineering</strong> — plan → dispatch → observe → improve → repeat
+            <ul>
+              <li>Every run produces a better team — first assignments: AI-designed scenarios (storage · control plane · busy-neighbor IO), test-index README, Prometheus metrics RFC</li>
+            </ul>
+          </li>
+        </ul>
+        <div class="caption-bar">
+          <p class="caption-text" id="team-caption">Today: one agent runs all eight phases, serial. Next: a team.</p>
+          <div id="team-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+
+
+      <section id="s-templates" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 4 · Templates</div>
+        <h2>Predefined report &amp; bug guidelines</h2>
+        <div class="template-pair">
+          <div class="doc-mock" id="doc-report">
+            <h3>report-guidelines.md · 14 sections</h3>
+            <ol id="report-sections">
+              <li>Executive Summary</li>
+              <li>Test Environment</li>
+              <li>Scenario Description</li>
+              <li>Migration Configuration (CRs)</li>
+              <li>Chaos Injection Method</li>
+              <li>How to Reproduce</li>
+              <li>Test Results</li>
+              <li>Performance Impact</li>
+              <li>Workload / Data Integrity</li>
+              <li>Bugs Found</li>
+              <li>Observations for Developer</li>
+              <li>Observations for Engineer</li>
+              <li>Verdict Summary</li>
+              <li>Artifact Paths</li>
+            </ol>
+          </div>
+          <div class="doc-mock" id="doc-bug">
+            <h3>bug-guidelines.md</h3>
+            <ol id="bug-sections">
+              <li>When to file (unexpected + reproduced + product)</li>
+              <li>Summary</li>
+              <li>Root Cause</li>
+              <li>Observed vs Expected</li>
+              <li>Evidence (timestamps, pod names)</li>
+              <li>Steps to Reproduce (copy-paste)</li>
+              <li>Per-iteration table</li>
+              <li>Suggested Fix → bug-tracker.md</li>
+            </ol>
+          </div>
+        </div>
+        <div class="caption-bar">
+          <p class="caption-text" id="tpl-caption">Templates keep 168+ runs consistent and engineer-ready.</p>
+          <div id="tpl-dots"></div>
+          <span class="t-hint">Press T for next step</span>
+        </div>
+      </section>
+
+      <section id="s-recs" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 5 · Customer recommendations</div>
+        <h2>What operators should do</h2>
+        <div class="two-col-text">
+          <ul class="rec-list" id="rec-list">
+            <li><strong>1.</strong> Always verify VM health independently — do not trust Forklift status alone</li>
+            <li><strong>2.</strong> Patch target <code>runStrategy</code> back to <code>Always</code> after migration</li>
+            <li><strong>3.</strong> Monitor and clean orphaned target resources before retry</li>
+            <li><strong>4.</strong> Batch Plan creation (groups of 10, 30s gap) for 50+ VMs</li>
+            <li><strong>Network:</strong> Protect <code>br-migration</code> first (&lt;5% loss). &lt;10 ms RTT low risk; &gt;15 ms budget extra time</li>
+          </ul>
+          <div>
+            <p style="font-size:0.55em;color:var(--color-muted-foreground)">Known customer concurrency (awels): <strong style="color:var(--color-foreground)">5 VMs/cluster, 2/node</strong>. Our scale &amp; chaos testing far exceeds that headroom.</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="s-bugs" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 5 · Product impact</div>
+        <h2>Bugs we found — 6 OCPBUGS</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Bug</th><th>Summary</th><th>Severity</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>OCPBUGS-99403</td><td>Forklift reports Succeeded when source VMIM Failed</td><td class="sev-critical">Critical</td></tr>
+              <tr><td>OCPBUGS-101771</td><td>Target VM runStrategy stuck at Halted after CCLM</td><td class="sev-critical">Critical</td></tr>
+              <tr><td>OCPBUGS-104616</td><td>VM runs on both clusters after CCLM + node drain</td><td class="sev-critical">Critical</td></tr>
+              <tr><td>OCPBUGS-101763</td><td>Webhook rejects Plans at 50+ concurrent creations</td><td class="sev-critical">Critical</td></tr>
+              <tr><td>OCPBUGS-99404</td><td>RBAC cleanup failure after failed CCLM</td><td class="sev-normal">Normal</td></tr>
+              <tr><td>OCPBUGS-101764</td><td>Single-replica forklift-api limits horizontal scaling</td><td class="sev-normal">Normal</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="font-size:0.55em;margin-top:14px;max-width:70ch;color:var(--color-foreground)">
+          Spotlight <strong style="color:var(--color-accent)">OCPBUGS-99403</strong>: WaitForStateTransfer → Completed without checking VMIM Succeeded — why guest validation exists.
+        </p>
+      </section>
+
+      <section id="s-close" data-background-color="#F1F5F9">
+        <div class="eyebrow">Act 6 · Close</div>
+        <h2>What we proved · What’s next</h2>
+        <div class="two-col-text">
+          <ul class="rec-list">
+            <li><strong>Proved:</strong> Network resilience PASS · E6/E7 control-plane stress PASS · guest-level live migration validation works</li>
+            <li><strong>Impact:</strong> 37+ scenarios · 168+ runs · 6 OCPBUGS · recommendations ready for product docs</li>
+            <li><strong>Agentic next:</strong> AI-designed scenarios — storage, control plane, busy-neighbor IO · test-index README · Prometheus migration-metrics RFC</li>
+          </ul>
+          <ul class="link-list">
+            <li><a href="https://redhat.atlassian.net/browse/CHAOS-1407" target="_blank" rel="noopener">CHAOS-1407</a></li>
+            <li><a href="https://github.com/redhat-chaos/vmshift-validator" target="_blank" rel="noopener">vmshift-validator</a></li>
+            <li><a href="https://github.com/redhat-chaos/vmshift-validator/tree/main/cclm-chaos/scenarios" target="_blank" rel="noopener">cclm-chaos/scenarios</a></li>
+            <li><a href="https://github.com/redhat-chaos/vmshift-validator/tree/main/.claude/skills/cclm-test" target="_blank" rel="noopener">cclm-test skill</a></li>
+            <li style="margin-top:16px;color:var(--color-muted-foreground)">ddjain@redhat.com · Q&amp;A</li>
+          </ul>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <div id="cclm-controls" role="toolbar" aria-label="Presentation controls">
+    <button type="button" class="kc-btn" id="kc-prev" aria-label="Previous slide">←</button>
+    <div id="kc-dots"></div>
+    <button type="button" class="kc-btn" id="kc-next" aria-label="Next slide">→</button>
+    <button type="button" class="kc-btn" id="kc-zoom" aria-label="Zoom UI">A</button>
+    <button type="button" class="kc-btn" id="kc-fullscreen" aria-label="Fullscreen">
+      <span class="kc-icon-enter">FS</span>
+      <span class="kc-icon-exit" style="display:none">✕</span>
+    </button>
+  </div>
+
+  <script src="js/reveal.js"></script>
+  <script src="js/gsap.min.js"></script>
+  <script src="js/beat-stepper.js"></script>
+  <script src="js/slides/s1-intro.js"></script>
+  <script src="js/slides/s1a-cclm-what.js"></script>
+  <script src="js/slides/s2-cclm-arch.js"></script>
+  <script src="js/slides/s3-memory.js"></script>
+  <script src="js/slides/s4-validator.js"></script>
+  <script src="js/slides/s5-scenarios.js"></script>
+  <script src="js/slides/s6-agentic.js"></script>
+  <script src="js/slides/s6a-agent-layer.js"></script>
+  <script src="js/slides/s6b-agent-gate.js"></script>
+  <script src="js/slides/s6c-agent-inject.js"></script>
+  <script src="js/slides/s6e-agent-team.js"></script>
+  <script src="js/slides/s7-templates.js"></script>
+  <script src="js/slides/s8-recs.js"></script>
+  <script src="js/slides/s9-bugs.js"></script>
+  <script src="js/slides/s10-close.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/controls.js"></script>
+</body>
+</html>
