@@ -370,46 +370,6 @@
       </section>
 
 
-      <!-- Act 4 Agent team -->
-      <section id="s-agent-team" data-background-color="#F1F5F9">
-        <div class="eyebrow">Act 4 · Next</div>
-        <h2>From one agent to a team</h2>
-        <ul class="team-list" id="team-list">
-          <li class="tm" data-tm="1">
-            <strong>Lead agent</strong> — one long-lived orchestrator: owns the plan and the verdict, dispatches work, patches the team
-            <ul>
-              <li>Short-lived specialist workers, one per task: issue-triage · krkn-prepare · observer · recovery · report-writer · analyst</li>
-              <li>Model per job: fast tier for polling/triage, mid tier for commands/reports, strongest for diagnosis &amp; judgment</li>
-            </ul>
-          </li>
-          <li class="tm" data-tm="2">
-            <strong>Shared state files</strong> — coordination through files on disk, not conversation
-            <ul>
-              <li><code>run-state.md</code> · <code>design.md</code> · <code>postmortems/</code> — every agent reads and writes the same state</li>
-            </ul>
-          </li>
-          <li class="tm" data-tm="3">
-            <strong>Self-improving</strong> — when a worker fails, the Lead learns from it
-            <ul>
-              <li>Failure → postmortem → Lead patches that subagent's prompt → relaunch improved worker next run</li>
-              <li>Seed already exists: the agent's 401 stale-token fix, saved to memory in the real run</li>
-            </ul>
-          </li>
-          <li class="tm" data-tm="4">
-            <strong>Loop engineering</strong> — plan → dispatch → observe → improve → repeat
-            <ul>
-              <li>Every run produces a better team — first assignments: AI-designed scenarios (storage · control plane · busy-neighbor IO), test-index README, Prometheus metrics RFC</li>
-            </ul>
-          </li>
-        </ul>
-        <div class="caption-bar">
-          <p class="caption-text" id="team-caption">Today: one agent runs all eight phases, serial. Next: a team.</p>
-          <div id="team-dots"></div>
-          <span class="t-hint">Press T for next step</span>
-        </div>
-      </section>
-
-
       <section id="s-templates" data-background-color="#F1F5F9">
         <div class="eyebrow">Act 4 · Templates</div>
         <h2>Predefined report &amp; bug guidelines</h2>
@@ -497,12 +457,47 @@
       <section id="s-close" data-background-color="#F1F5F9">
         <div class="eyebrow">Act 6 · Close</div>
         <h2>What we proved · What’s next</h2>
-        <div class="two-col-text">
-          <ul class="rec-list">
-            <li><strong>Proved:</strong> Network resilience PASS · E6/E7 control-plane stress PASS · guest-level live migration validation works</li>
-            <li><strong>Impact:</strong> 37+ scenarios · 168+ runs · 6 OCPBUGS · recommendations ready for product docs</li>
-            <li><strong>Agentic next:</strong> AI-designed scenarios — storage, control plane, busy-neighbor IO · test-index README · Prometheus migration-metrics RFC</li>
-          </ul>
+        <div class="close-layout">
+          <div class="close-main">
+            <ul class="rec-list close-proved">
+              <li><strong>Proved:</strong> Network resilience PASS · E6/E7 control-plane stress PASS · guest-level live migration validation works</li>
+              <li><strong>Impact:</strong> 37+ scenarios · 168+ runs · 6 OCPBUGS · recommendations ready for product docs</li>
+            </ul>
+            <div class="agentic-next-block">
+              <div class="agentic-next-label">Agentic next</div>
+              <ul class="team-list close-team-list" id="close-team-list">
+                <li class="tm" data-tm="1">
+                  <strong>Agentic Scenario Discovery</strong> — AI-designed scenarios (storage · control plane · busy-neighbor IO) · test-index README · Prometheus migration-metrics RFC
+                </li>
+                <li class="tm" data-tm="2">
+                  <strong>Lead agent</strong> — one long-lived orchestrator: owns the plan and the verdict, dispatches work, patches the team
+                  <ul>
+                    <li>Short-lived specialist workers, one per task: issue-triage · krkn-prepare · observer · recovery · report-writer · analyst</li>
+                    <li>Model per job: fast tier for polling/triage, mid tier for commands/reports, strongest for diagnosis &amp; judgment</li>
+                  </ul>
+                </li>
+                <li class="tm" data-tm="3">
+                  <strong>Shared state files</strong> — coordination through files on disk, not conversation
+                  <ul>
+                    <li><code>run-state.md</code> · <code>design.md</code> · <code>postmortems/</code> — every agent reads and writes the same state</li>
+                  </ul>
+                </li>
+                <li class="tm" data-tm="4">
+                  <strong>Self-improving</strong> — when a worker fails, the Lead learns from it
+                  <ul>
+                    <li>Failure → postmortem → Lead patches that subagent's prompt → relaunch improved worker next run</li>
+                    <li>Seed already exists: the agent's 401 stale-token fix, saved to memory in the real run</li>
+                  </ul>
+                </li>
+                <li class="tm" data-tm="5">
+                  <strong>Loop engineering</strong> — plan → dispatch → observe → improve → repeat
+                  <ul>
+                    <li>Every run produces a better team</li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </div>
           <ul class="link-list">
             <li><a href="https://redhat.atlassian.net/browse/CHAOS-1407" target="_blank" rel="noopener">CHAOS-1407</a></li>
             <li><a href="https://github.com/redhat-chaos/vmshift-validator" target="_blank" rel="noopener">vmshift-validator</a></li>
@@ -537,7 +532,6 @@
   <script src="js/slides/s4-validator.js"></script>
   <script src="js/slides/s5-scenarios.js"></script>
   <script src="js/slides/s6-agentic.js"></script>
-  <script src="js/slides/s6e-agent-team.js"></script>
   <script src="js/slides/s7-templates.js"></script>
   <script src="js/slides/s8-recs.js"></script>
   <script src="js/slides/s9-bugs.js"></script>

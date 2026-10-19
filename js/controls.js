@@ -8,11 +8,10 @@
     { label: 'Testing', h: 4 },
     { label: 'Scenarios', h: 5 },
     { label: 'Agentic', h: 6 },
-    { label: 'Team', h: 7 },
-    { label: 'Templates', h: 8 },
-    { label: 'Recs', h: 9 },
-    { label: 'Bugs', h: 10 },
-    { label: 'Close', h: 11 },
+    { label: 'Templates', h: 7 },
+    { label: 'Recs', h: 8 },
+    { label: 'Bugs', h: 9 },
+    { label: 'Close', h: 10 },
   ];
 
   var bar = document.getElementById('cclm-controls');
