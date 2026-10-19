@@ -12,6 +12,7 @@
     { label: 'Recs', h: 8 },
     { label: 'Bugs', h: 9 },
     { label: 'Close', h: 10 },
+    { label: 'Thanks', h: 11 },
   ];
 
   var bar = document.getElementById('cclm-controls');

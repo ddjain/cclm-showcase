@@ -86,7 +86,14 @@ html, body {
   font-size: 0.62em;
   font-weight: 600;
   color: var(--color-foreground);
-  margin: 0 0 8px;
+  margin: 0 0 4px;
+}
+
+.team-line {
+  font-size: 0.48em;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+  margin: 0 0 18px;
 }
 
 .infra-panel {
@@ -1229,6 +1236,28 @@ html, body {
 
 #s-close .link-list {
   margin-top: 4px;
+}
+
+.thanks-slide {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 72vh;
+  max-width: 48ch;
+}
+
+.thanks-slide .title-primary {
+  margin-bottom: 10px;
+}
+
+.thanks-slide .title-secondary {
+  margin-bottom: 22px;
+  color: var(--color-accent);
+}
+
+.thanks-slide .presenter-line {
+  font-size: 0.7em;
+  color: var(--color-muted-foreground);
 }
 
 .template-pair {

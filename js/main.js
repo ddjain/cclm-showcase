@@ -33,6 +33,9 @@ var SLIDE_FN_MAP = {
   's-close': function () {
     return typeof animateClose === 'function' ? animateClose : null;
   },
+  's-thanks': function () {
+    return typeof animateThanks === 'function' ? animateThanks : null;
+  },
 };
 
 var currentCleanup = null;
