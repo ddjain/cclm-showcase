@@ -16,6 +16,7 @@
         <h1 class="title-primary">Cross-Cluster Live Migration</h1>
         <h2 class="title-secondary">Chaos &amp; Resilience Testing</h2>
         <p class="presenter-line">Darshan Jain</p>
+        <p class="team-line">Chaos Engineering Team</p>
         <ol class="agenda-list" id="intro-agenda">
           <li><span class="num">01</span> What is CCLM and how it works</li>
           <li><span class="num">02</span> How we tested — vmshift-validator</li>
@@ -285,37 +286,6 @@
         </div>
       </section>
 
-      <!-- Act 4 Agentic layer -->
-      <section id="s-agent-layer" data-background-color="#F1F5F9">
-        <div class="eyebrow">Act 4 · Agentic chaos</div>
-        <h2>From scripted harness to agent</h2>
-        <div class="layer-grid">
-          <div class="layer-col" id="layer-harness">
-            <div class="layer-tag">vmshift-validator · deterministic</div>
-            <div class="hstep" data-hs="1"><span class="hs-n">1</span><span>density-setup — kube-burner VM fleet</span></div>
-            <div class="hstep" data-hs="2"><span class="hs-n">2</span><span>pre-check — guest baseline snapshot</span></div>
-            <div class="hstep" data-hs="3"><span class="hs-n">3</span><span>migrate-selective — Forklift blue→green</span></div>
-            <div class="hstep" data-hs="4"><span class="hs-n">4</span><span>post-check — PIDs · SQLite · files</span></div>
-            <div class="hstep" data-hs="5"><span class="hs-n">5</span><span>report — summary.json verdict</span></div>
-          </div>
-          <div class="layer-col" id="layer-agent">
-            <div class="layer-tag layer-tag-agent">.claude/skills/cclm-test · agentic</div>
-            <div class="agent-bubble" data-ab="1"><span class="ab-who">human</span><span class="ab-txt">“kill virt-launcher during migration”</span></div>
-            <div class="agent-bubble agent-out" data-ab="2"><span class="ab-who">agent</span><span class="ab-txt">matches A1 spec → proposes test plan</span></div>
-            <div class="agent-bubble agent-out" data-ab="3"><span class="ab-who">agent</span><span class="ab-txt">runs harness · proves injection · judges PASS/FAIL vs spec</span></div>
-            <div class="layer-artifacts" data-ab="4">
-              <span class="layer-chip">14-section report</span>
-              <span class="layer-chip">bug file + tracker</span>
-              <span class="layer-chip">verdict</span>
-            </div>
-          </div>
-        </div>
-        <div class="caption-bar">
-          <p class="caption-text" id="layer-caption">The harness is deterministic. The agent around it is not — that's the point.</p>
-          <div id="layer-dots"></div>
-          <span class="t-hint">Press T for next step</span>
-        </div>
-      </section>
       <!-- Act 4 Agentic -->
       <section id="s-agentic" data-background-color="#F1F5F9">
         <div class="eyebrow">Act 4 · cclm-test skill</div>
@@ -401,112 +371,6 @@
       </section>
 
 
-      <!-- Act 4 Gate the chaos -->
-      <section id="s-agent-gate" data-background-color="#F1F5F9">
-        <div class="eyebrow">Act 4 · Trigger gates</div>
-        <h2>Gate the chaos — fire at the exact moment</h2>
-        <p style="font-size:0.5em;color:var(--color-muted-foreground)">
-          krknctl startup (~10s) made blind kills <em>miss</em> the migration window → phase-gated triggers
-        </p>
-        <div class="gate-wrap">
-          <div class="gate-rail">
-            <div class="gate-rail-label">migration</div>
-            <div class="gate-node" data-gn="1">Plan Ready</div>
-            <div class="gate-node gate-node-gate" data-gn="2">VMIM Running</div>
-            <div class="gate-node" data-gn="3">Scheduling</div>
-            <div class="gate-node" data-gn="4">Synchronization</div>
-            <div class="gate-node" data-gn="5">Completed</div>
-            <div class="gate-bolt" id="gate-bolt">⚡</div>
-          </div>
-          <div class="gate-rail gate-rail-chaos">
-            <div class="gate-rail-label">chaos</div>
-            <div class="gate-poll" data-gp="1">poll VMIM phase</div>
-            <div class="gate-poll" data-gp="2">poll…</div>
-            <div class="gate-poll" data-gp="3">gate hit → inject</div>
-            <div class="gate-hold" data-gp="4">fault stays active across cutover</div>
-          </div>
-          <div class="gate-human">
-            <div class="gh-badge" id="gh-badge">P4 · HUMAN GATE</div>
-            <div class="gh-req">agent proposes plan</div>
-            <div class="gh-arrow" id="gh-arrow">⇢</div>
-            <div class="gh-ok" id="gh-ok">user confirms ✓</div>
-          </div>
-        </div>
-        <div class="caption-bar">
-          <p class="caption-text" id="gate-caption">Spec declares the gate: vmim-running, target-pod, plan-executing — chaos fires only then.</p>
-          <div id="gate-dots"></div>
-          <span class="t-hint">Press T for next step</span>
-        </div>
-      </section>
-
-      <!-- Act 4 Prove injection -->
-      <section id="s-agent-inject" data-background-color="#F1F5F9">
-        <div class="eyebrow">Act 4 · Phase 6</div>
-        <h2>Prove the injection — or trust nothing</h2>
-        <div class="inject-grid">
-          <div class="inject-case">
-            <div class="ic-head">The bug we caught by checking</div>
-            <div class="ic-cmd">krkn network-chaos <span class="ic-flag">{loss: 0.10}</span></div>
-            <div class="ic-eq">→ tc netem loss <span class="ic-bad">0.1</span> — <strong>0.1%, not 10%</strong></div>
-            <div class="ic-verdict" id="ic-verdict">B2 verdict: INCONCLUSIVE — “intended chaos level achieved: FAIL”</div>
-            <p class="ic-note">Krkn docs say fraction · tc expects percent · two runs invalid, caught by Phase 6 evidence</p>
-          </div>
-          <div class="inject-evidence">
-            <div class="ie-head">Evidence, not assertion</div>
-            <div class="ie-chip" data-iev="1"><span class="ie-ic">🛰</span> krkn pod logs show fault active</div>
-            <div class="ie-chip" data-iev="2"><span class="ie-ic">🔗</span> tc qdisc visible on the wire</div>
-            <div class="ie-chip" data-iev="3"><span class="ie-ic">📉</span> pod deleted / events recorded</div>
-            <div class="ie-chip" data-iev="4"><span class="ie-ic">🕐</span> fault span covers VMIM window</div>
-            <div class="ie-rule" id="ie-rule">No verified injection → no verdict. Ever.</div>
-          </div>
-        </div>
-        <div class="caption-bar">
-          <p class="caption-text" id="inject-caption">Phase 6 exists because commands lie: prove the fault fired before reading any result.</p>
-          <div id="inject-dots"></div>
-          <span class="t-hint">Press T for next step</span>
-        </div>
-      </section>
-
-      <!-- Act 4 Agent team -->
-      <section id="s-agent-team" data-background-color="#F1F5F9">
-        <div class="eyebrow">Act 4 · Next</div>
-        <h2>From one agent to a team</h2>
-        <ul class="team-list" id="team-list">
-          <li class="tm" data-tm="1">
-            <strong>Lead agent</strong> — one long-lived orchestrator: owns the plan and the verdict, dispatches work, patches the team
-            <ul>
-              <li>Short-lived specialist workers, one per task: issue-triage · krkn-prepare · observer · recovery · report-writer · analyst</li>
-              <li>Model per job: fast tier for polling/triage, mid tier for commands/reports, strongest for diagnosis &amp; judgment</li>
-            </ul>
-          </li>
-          <li class="tm" data-tm="2">
-            <strong>Shared state files</strong> — coordination through files on disk, not conversation
-            <ul>
-              <li><code>run-state.md</code> · <code>design.md</code> · <code>postmortems/</code> — every agent reads and writes the same state</li>
-            </ul>
-          </li>
-          <li class="tm" data-tm="3">
-            <strong>Self-improving</strong> — when a worker fails, the Lead learns from it
-            <ul>
-              <li>Failure → postmortem → Lead patches that subagent's prompt → relaunch improved worker next run</li>
-              <li>Seed already exists: the agent's 401 stale-token fix, saved to memory in the real run</li>
-            </ul>
-          </li>
-          <li class="tm" data-tm="4">
-            <strong>Loop engineering</strong> — plan → dispatch → observe → improve → repeat
-            <ul>
-              <li>Every run produces a better team — first assignments: AI-designed scenarios (storage · control plane · busy-neighbor IO), test-index README, Prometheus metrics RFC</li>
-            </ul>
-          </li>
-        </ul>
-        <div class="caption-bar">
-          <p class="caption-text" id="team-caption">Today: one agent runs all eight phases, serial. Next: a team.</p>
-          <div id="team-dots"></div>
-          <span class="t-hint">Press T for next step</span>
-        </div>
-      </section>
-
-
       <section id="s-templates" data-background-color="#F1F5F9">
         <div class="eyebrow">Act 4 · Templates</div>
         <h2>Predefined report &amp; bug guidelines</h2>
@@ -553,7 +417,7 @@
 
       <section id="s-recs" data-background-color="#F1F5F9">
         <div class="eyebrow">Act 5 · Customer recommendations</div>
-        <h2>What operators should do</h2>
+        <h2>What customers should do</h2>
         <div class="two-col-text">
           <ul class="rec-list" id="rec-list">
             <li><strong>1.</strong> Always verify VM health independently — do not trust Forklift status alone</li>
@@ -594,19 +458,56 @@
       <section id="s-close" data-background-color="#F1F5F9">
         <div class="eyebrow">Act 6 · Close</div>
         <h2>What we proved · What’s next</h2>
-        <div class="two-col-text">
-          <ul class="rec-list">
-            <li><strong>Proved:</strong> Network resilience PASS · E6/E7 control-plane stress PASS · guest-level live migration validation works</li>
-            <li><strong>Impact:</strong> 37+ scenarios · 168+ runs · 6 OCPBUGS · recommendations ready for product docs</li>
-            <li><strong>Agentic next:</strong> AI-designed scenarios — storage, control plane, busy-neighbor IO · test-index README · Prometheus migration-metrics RFC</li>
-          </ul>
+        <div class="close-layout">
+          <div class="close-main">
+            <ul class="rec-list close-proved">
+              <li><strong>Proved:</strong> Network resilience PASS · E6/E7 control-plane stress PASS · guest-level live migration validation works</li>
+              <li><strong>Impact:</strong> 37+ scenarios · 168+ runs · 6 OCPBUGS · recommendations ready for product docs</li>
+            </ul>
+            <div class="agentic-next-block">
+              <div class="agentic-next-label">Agentic next</div>
+              <ul class="team-list close-team-list" id="close-team-list">
+                <li class="tm" data-tm="1">
+                  <strong>Agentic Scenario Discovery</strong> — AI-designed scenarios (storage · control plane · busy-neighbor IO) · test-index README · Prometheus migration-metrics RFC
+                </li>
+                <li class="tm" data-tm="2">
+                  <strong>Lead agent</strong> — one long-lived orchestrator: owns the plan and the verdict, dispatches work, patches the team
+                  <ul>
+                    <li>Short-lived specialist workers, one per task: issue-triage · krkn-prepare · observer · recovery · report-writer · analyst</li>
+                    <li>Model per job: fast tier for polling/triage, mid tier for commands/reports, strongest for diagnosis &amp; judgment</li>
+                  </ul>
+                </li>
+                <li class="tm" data-tm="3">
+                  <strong>Shared state files</strong> — coordination through files on disk, not conversation
+                  <ul>
+                    <li><code>run-state.md</code> · <code>design.md</code> · <code>postmortems/</code> — every agent reads and writes the same state</li>
+                  </ul>
+                </li>
+                <li class="tm" data-tm="4">
+                  <strong>Self-improving</strong> — when a worker fails, the Lead learns from it
+                  <ul>
+                    <li>Failure → postmortem → Lead patches that subagent's prompt → relaunch improved worker next run</li>
+                    <li>Seed already exists: the agent's 401 stale-token fix, saved to memory in the real run</li>
+                  </ul>
+                </li>
+              </ul>
+            </div>
+          </div>
           <ul class="link-list">
             <li><a href="https://redhat.atlassian.net/browse/CHAOS-1407" target="_blank" rel="noopener">CHAOS-1407</a></li>
             <li><a href="https://github.com/redhat-chaos/vmshift-validator" target="_blank" rel="noopener">vmshift-validator</a></li>
             <li><a href="https://github.com/redhat-chaos/vmshift-validator/tree/main/cclm-chaos/scenarios" target="_blank" rel="noopener">cclm-chaos/scenarios</a></li>
             <li><a href="https://github.com/redhat-chaos/vmshift-validator/tree/main/.claude/skills/cclm-test" target="_blank" rel="noopener">cclm-test skill</a></li>
-            <li style="margin-top:16px;color:var(--color-muted-foreground)">ddjain@redhat.com · Q&amp;A</li>
           </ul>
+        </div>
+      </section>
+
+      <section id="s-thanks" data-background-color="#F1F5F9">
+        <div class="thanks-slide">
+          <div class="eyebrow">Act 6 · Close</div>
+          <h1 class="title-primary" id="thanks-title">Thank you</h1>
+          <h2 class="title-secondary" id="thanks-qa">Q&amp;A</h2>
+          <p class="presenter-line" id="thanks-contact">darjain@redhat.com</p>
         </div>
       </section>
 
@@ -634,14 +535,11 @@
   <script src="js/slides/s4-validator.js"></script>
   <script src="js/slides/s5-scenarios.js"></script>
   <script src="js/slides/s6-agentic.js"></script>
-  <script src="js/slides/s6a-agent-layer.js"></script>
-  <script src="js/slides/s6b-agent-gate.js"></script>
-  <script src="js/slides/s6c-agent-inject.js"></script>
-  <script src="js/slides/s6e-agent-team.js"></script>
   <script src="js/slides/s7-templates.js"></script>
   <script src="js/slides/s8-recs.js"></script>
   <script src="js/slides/s9-bugs.js"></script>
   <script src="js/slides/s10-close.js"></script>
+  <script src="js/slides/s11-thanks.js"></script>
   <script src="js/main.js"></script>
   <script src="js/controls.js"></script>
 </body>
