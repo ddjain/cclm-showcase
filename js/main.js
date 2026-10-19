@@ -21,15 +21,6 @@ var SLIDE_FN_MAP = {
   's-agentic': function () {
     return typeof animateAgentic === 'function' ? animateAgentic : null;
   },
-  's-agent-layer': function () {
-    return typeof animateAgentLayer === 'function' ? animateAgentLayer : null;
-  },
-  's-agent-gate': function () {
-    return typeof animateAgentGate === 'function' ? animateAgentGate : null;
-  },
-  's-agent-inject': function () {
-    return typeof animateAgentInject === 'function' ? animateAgentInject : null;
-  },
   's-agent-team': function () {
     return typeof animateAgentTeam === 'function' ? animateAgentTeam : null;
   },
